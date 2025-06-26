@@ -1,0 +1,56 @@
+from apscheduler.schedulers.background import BackgroundScheduler
+from utils.storage import get_last_block, set_last_block, upsert_tx
+from utils.fetch_base import fetch_base_transactions_rpc
+from utils.fetch_ton import fetch_ton_transactions
+from utils.transform import transform_raw_base, transform_raw_ton
+from web3 import Web3
+
+# Список отслеживаемых адресов
+BASE_CONTRACTS = {
+    "GemMinter": "0xabc1234567890...",  # Пример адреса
+    # можно добавить ещё
+}
+TON_CONTRACTS = {
+    "GemMinter": "UQCn9hCC6tNykDqZisfJvwrE9RQNPalV8VArNWrmI_REtoHz",
+    # можно добавить ещё
+}
+
+# Web3-провайдер для BASE
+w3 = Web3(Web3.HTTPProvider("https://base-rpc-url.com"))  # заменишь на свой
+
+def update_base_data():
+    for name, addr in BASE_CONTRACTS.items():
+        try:
+            last = get_last_block("BASE", addr)
+            head = w3.eth.block_number
+            if last >= head:
+                continue
+            logs = fetch_base_transactions_rpc(addr, from_block=last+1, to_block=head)
+            df = transform_raw_base(logs, addr)  # addr передай, если нужно фильтровать
+            upsert_tx(df)
+            set_last_block("BASE", addr, head)
+            print(f"[BASE] Updated {name}: {len(df)} tx")
+        except Exception as e:
+            print(f"[BASE] Error updating {name}: {e}")
+
+def update_ton_data():
+    for name, addr in TON_CONTRACTS.items():
+        try:
+            last = get_last_block("TON", addr)
+            txs = fetch_ton_transactions(addr, since_lt=last)
+            df = transform_raw_ton(txs, addr)
+            upsert_tx(df)
+            if not df.empty:
+                new_max = df["block_num"].max()
+                set_last_block("TON", addr, new_max)
+            print(f"[TON] Updated {name}: {len(df)} tx")
+        except Exception as e:
+            print(f"[TON] Error updating {name}: {e}")
+
+# Запуск планировщика
+def start():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(update_base_data, "interval", minutes=10)
+    scheduler.add_job(update_ton_data, "interval", minutes=10)
+    scheduler.start()
+    print("[Scheduler] Jobs scheduled every 10 minutes")
