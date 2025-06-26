@@ -1,3 +1,9 @@
-matplotlib
-pandas
 streamlit
+apscheduler
+web3
+requests
+pandas
+sqlalchemy
+matplotlib
+plotly
+altair
