@@ -23,15 +23,18 @@ def _conn():
 def init_db():
     with _conn() as c:
         c.execute("""
-          CREATE TABLE IF NOT EXISTS tx (
+        CREATE TABLE IF NOT EXISTS transactions (
             tx_hash     TEXT PRIMARY KEY,
+            timestamp   INTEGER,              -- unix-time (сек)
             block_num   INTEGER,
-            block_time  TIMESTAMP,
             from_addr   TEXT,
             to_addr     TEXT,
-            amount      REAL,
-            network     TEXT
-          )""")
+            value       REAL,
+            network     TEXT,
+            contract    TEXT,
+            type        TEXT                  -- mint | withdraw | deposit
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_net_ctr ON transactions (network, contract)")
         c.execute("""
           CREATE TABLE IF NOT EXISTS progress (
             network   TEXT,

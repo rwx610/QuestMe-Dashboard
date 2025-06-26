@@ -1,6 +1,8 @@
+# transform.py
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
+
 
 DB_PATH = "data/tx.sqlite"
 
@@ -69,3 +71,43 @@ def get_wallet_stats(network: str, contract: str, wallet: str) -> dict:
         "total_value": wallet_df['value'].sum(),
         "last_tx": wallet_df['timestamp'].max() if not wallet_df.empty else None,
     }
+
+
+def transform_raw_base(raw_logs, contract_addr: str, op_type: str = "mint") -> pd.DataFrame:
+    rows = []
+    for lg in raw_logs:
+        try:
+            rows.append({
+                "tx_hash":   lg["transactionHash"].hex() if isinstance(lg["transactionHash"], bytes) else lg["transactionHash"],
+                "timestamp": int(lg["timeStamp"]),                # либо получить из блока через RPC
+                "block_num": int(lg["blockNumber"]),
+                "from_addr": lg["from"],
+                "to_addr":   lg["to"],
+                "value":     int(lg["value"]) / 1e18,             # ETH → единицы
+                "network":   "BASE",
+                "contract":  contract_addr,
+                "type":      op_type
+            })
+        except Exception:
+            continue
+    return pd.DataFrame(rows)
+
+
+def transform_raw_ton(raw_txs, contract_addr: str, op_type: str = "mint") -> pd.DataFrame:
+    rows = []
+    for tx in raw_txs:
+        try:
+            rows.append({
+                "tx_hash":   tx["transaction_id"],
+                "timestamp": int(tx["timestamp"]),                 # сек
+                "block_num": int(tx["lt"]),                        # logical-time
+                "from_addr": tx["from"],
+                "to_addr":   tx["to"],
+                "value":     float(tx["amount"]),                  # в TON или USDT
+                "network":   "TON",
+                "contract":  contract_addr,
+                "type":      op_type
+            })
+        except Exception:
+            continue
+    return pd.DataFrame(rows)
