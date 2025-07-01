@@ -1,10 +1,12 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from utils.storage import get_last_block, set_last_block, upsert_tx
-from utils.fetch_base import fetch_base_transactions_rpc
+from utils.fetch_base import fetch_logs
 from utils.fetch_ton import fetch_ton_transactions
 from utils.transform import transform_raw_base, transform_raw_ton
 from web3 import Web3
 import sys
+
+from utils.contracts import Contracts
 
 # Список отслеживаемых адресов
 BASE_CONTRACTS = {
@@ -19,6 +21,7 @@ TON_CONTRACTS = {
 # Web3-провайдер для BASE
 w3 = Web3(Web3.HTTPProvider("https://base-rpc.publicnode.com"))  # заменишь на свой
 
+
 def update_base_data():
     for name, addr in BASE_CONTRACTS.items():
         try:
@@ -26,7 +29,7 @@ def update_base_data():
             head = w3.eth.block_number
             if last >= head:
                 continue
-            logs = fetch_base_transactions_rpc(addr, from_block=last+1, to_block=head)
+            logs = fetch_logs(chainid=Contracts.base.chain_id, address=addr, from_block=31343717)
             df = transform_raw_base(logs, addr)  # addr передай, если нужно фильтровать
             print("TRANSFORM", len(df), df.head(1))
             upsert_tx(df)
@@ -34,6 +37,7 @@ def update_base_data():
             print(f"[BASE] Updated {name}: {len(df)} tx")
         except Exception as e:
             print(f"[BASE] Error updating {name}: {e}")
+
 
 def update_ton_data():
     print(f"[TON] update_ton_data")
@@ -51,10 +55,16 @@ def update_ton_data():
         except Exception as e:
             print(f"[TON] Error updating {name}: {e}")
 
-# Запуск планировщика
+
 def start():
     scheduler = BackgroundScheduler()
+
     scheduler.add_job(update_base_data, "interval", minutes=1)
     scheduler.add_job(update_ton_data, "interval", minutes=1)
+
+    # выполняем первую синхронную итерацию
+    update_base_data()
+    update_ton_data()
+
     scheduler.start()
-    print("[Scheduler] Jobs scheduled every 1 minutes")
+    print("[Scheduler] First run done, subsequent runs every 1 minute")

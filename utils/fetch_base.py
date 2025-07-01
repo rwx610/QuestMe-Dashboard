@@ -1,6 +1,7 @@
 from web3 import Web3
 import requests
 from typing import List, Dict, Union
+import streamlit as st
 
 
 RPC_URL = "https://base-rpc.publicnode.com"  # твой RPC URL
@@ -38,11 +39,12 @@ def fetch_base_transactions_rpc(address: str, from_block: int, to_block: int):
 def fetch_logs(
     chainid: int,
     address: str,
-    apikey: str,
     from_block: Union[int, str] = 0,
     to_block: Union[int, str] = "latest",
+    apikey: str = st.secrets['etherscan']['key'],
     offset: int = 1000,
     timeout: int = 20,
+    
 ) -> List[Dict]:
 
     base_url = "https://api.etherscan.io/v2/api"
