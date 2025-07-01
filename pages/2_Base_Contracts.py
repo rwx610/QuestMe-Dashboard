@@ -83,7 +83,7 @@ def _raw_df():
 raw_df = _raw_df()
 
 if wallet_filter:
-    filt = raw_df[raw_df["from_address"].str.contains(wallet_filter, case=False)]
+    filt = raw_df[raw_df["from"].str.contains(wallet_filter, case=False)]
     w_stats = get_wallet_stats(NETWORK, CONTRACT, wallet_filter)
     st.info(
         f"Транзакций у **{wallet_filter}**: {w_stats['tx_count']}, "

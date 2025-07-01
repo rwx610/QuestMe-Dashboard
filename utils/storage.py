@@ -9,10 +9,11 @@ import pandas as pd
 DB_PATH = "data/tx.sqlite"
 os.makedirs("data", exist_ok=True)
 
+
 @contextmanager
 def _conn():
     con = sqlite3.connect(DB_PATH)
-    con.execute("PRAGMA journal_mode=WAL")   # безопаснее параллельная запись
+    con.execute("PRAGMA journal_mode=WAL")  # безопаснее параллельная запись
     try:
         yield con
     finally:
@@ -22,48 +23,68 @@ def _conn():
 
 def init_db():
     with _conn() as c:
-        c.execute("""
+        c.execute(
+            """
         CREATE TABLE IF NOT EXISTS transactions (
             tx_hash     TEXT PRIMARY KEY,
             timestamp   INTEGER,              -- unix-time (сек)
-            block_num   INTEGER,
-            from_addr   TEXT,
-            to_addr     TEXT,
+            block       INTEGER,
+            "from"        TEXT,
+            "to"          TEXT,
             value       REAL,
             network     TEXT,
             contract    TEXT,
             type        TEXT                  -- mint | withdraw | deposit
-        )""")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_net_ctr ON transactions (network, contract)")
-        c.execute("""
+        )"""
+        )
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_net_ctr ON transactions (network, contract)"
+        )
+        c.execute(
+            """
           CREATE TABLE IF NOT EXISTS progress (
-            network   TEXT,
-            contract  TEXT,
-            last_blk  INTEGER,
-            updated_at TIMESTAMP,
+            network     TEXT,
+            contract    TEXT,
+            last_block  INTEGER,
+            updated_at  TIMESTAMP,
             PRIMARY KEY (network, contract)
-          )""")
+          )"""
+        )
     print("SQLite ready ✨")
+
+
 init_db()
+
 
 # ---------- progress helpers ----------
 def get_last_block(network: str, contract: str) -> int:
     with _conn() as c:
         cur = c.execute(
-            "SELECT last_blk FROM progress WHERE network=? AND contract=?",
+            "SELECT last_block FROM progress WHERE network=? AND contract=?",
             (network, contract),
         ).fetchone()
     return cur[0] if cur else 0
 
+
 def set_last_block(network: str, contract: str, blk: int):
+    ts = datetime.utcnow()
     with _conn() as c:
-        c.execute("""
-          INSERT INTO progress (network, contract, last_blk, updated_at)
-          VALUES (?,?,?,?)
-          ON CONFLICT(network,contract) DO UPDATE
-              SET last_blk=excluded.last_blk,
-                  updated_at=excluded.updated_at
-        """, (network, contract, blk, datetime.utcnow()))
+        cur = c.execute(
+            """
+            UPDATE progress
+            SET last_block = ?, updated_at = ?
+            WHERE network = ? AND contract = ?
+            """,
+            (blk, ts, network, contract),
+        )
+        if cur.rowcount == 0:
+            c.execute(
+                """
+                INSERT INTO progress (network, contract, last_block, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (network, contract, blk, ts),
+            )
 
 
 # ---------- tx upsert ----------
@@ -72,17 +93,19 @@ def upsert_tx(df: pd.DataFrame):
         return
     with _conn() as c:
         df.to_sql("tmp_tx", c, if_exists="replace", index=False)
-        c.execute("""
-          INSERT INTO tx
-          SELECT * FROM tmp_tx
-          ON CONFLICT(tx_hash) DO NOTHING
-        """)
+        c.execute(
+            """
+          INSERT OR IGNORE INTO transactions
+          SELECT * FROM tmp_tx;
+        """
+        )
         c.execute("DROP TABLE tmp_tx")
 
 
 # ---------- loaders ----------
-def load_tx(network: Literal["BASE", "TON", "ALL"] = "ALL",
-            contract: str | None = None) -> pd.DataFrame:
+def load_tx(
+    network: Literal["BASE", "TON", "ALL"] = "ALL", contract: str | None = None
+) -> pd.DataFrame:
     q = "SELECT * FROM tx"
     params = []
     if network != "ALL":

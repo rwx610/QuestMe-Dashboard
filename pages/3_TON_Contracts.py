@@ -82,7 +82,7 @@ def _load_raw():
 raw_df = _load_raw()
 
 if wallet_filter:
-    filt_df = raw_df[raw_df["from_address"].str.contains(wallet_filter, case=False)]
+    filt_df = raw_df[raw_df["from"].str.contains(wallet_filter, case=False)]
     stats = get_wallet_stats(NETWORK, CONTRACT, wallet_filter)
     st.info(f"Транзакций у **{wallet_filter}**: {stats['tx_count']}, "
             f"всего GEM: {stats['total_value']}")

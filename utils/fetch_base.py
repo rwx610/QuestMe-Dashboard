@@ -1,16 +1,13 @@
 from web3 import Web3
-import os
+import requests
+from typing import List, Dict, Union
+
 
 RPC_URL = "https://base-rpc.publicnode.com"  # твой RPC URL
 MAX_BLOCK_RANGE = 50000
-LAST_BLOCK_FILE = "last_block.txt"
+
 
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
-
-
-def save_last_processed_block(block_number):
-    with open(LAST_BLOCK_FILE, "w") as f:
-        f.write(str(block_number))
 
 
 def fetch_base_transactions_rpc(address: str, from_block: int, to_block: int):
@@ -21,32 +18,116 @@ def fetch_base_transactions_rpc(address: str, from_block: int, to_block: int):
         print(f"Запрашиваю блоки с {current_from} по {current_to}")
 
         try:
-            logs = w3.eth.get_logs({
-                'fromBlock': current_from,
-                'toBlock': current_to,
-                'address': Web3.to_checksum_address(address)
-            })
+            logs = w3.eth.get_logs(
+                {
+                    "fromBlock": current_from,
+                    "toBlock": current_to,
+                    "address": Web3.to_checksum_address(address),
+                }
+            )
             all_logs.extend(logs)
         except Exception as e:
             print(f"Ошибка RPC запроса: {e}")
             break
 
-        # Сохраняем последний обработанный блок (конец текущего диапазона)
-        save_last_processed_block(current_to)
         current_from = current_to + 1
 
     return all_logs
 
 
+def fetch_logs(
+    chainid: int,
+    address: str,
+    apikey: str,
+    from_block: Union[int, str] = 0,
+    to_block: Union[int, str] = "latest",
+    offset: int = 1000,
+    timeout: int = 20,
+) -> List[Dict]:
+
+    base_url = "https://api.etherscan.io/v2/api"
+    page = 1
+    all_logs = []
+
+    while True:
+        params = {
+            "chainid": chainid,
+            "module": "logs",
+            "action": "getLogs",
+            "address": address,
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "page": page,
+            "offset": offset,
+            "apikey": apikey,
+        }
+        response = requests.get(base_url, params=params, timeout=timeout)
+        response.raise_for_status()
+
+        payload = response.json()
+
+        logs = payload.get("result", []) if payload.get("status") == "1" else []
+
+        all_logs.extend(logs)
+
+        if len(logs) < offset:
+            break
+        page += 1
+
+    return all_logs
+
+
+import time
+import requests
+from typing import Optional, Literal
+
+
+def get_block_by_time(
+    chainid: int,
+    apikey: str,
+    timestamp: Optional[int] = None,
+    closest: Literal["before", "after"] = "before",
+    timeout: int = 10,
+) -> int:
+
+    if timestamp is None:
+        timestamp = int(time.time())
+
+    base_url = "https://api.etherscan.io/v2/api"
+    params = {
+        "chainid": chainid,
+        "module": "block",
+        "action": "getblocknobytime",
+        "timestamp": timestamp,
+        "closest": closest,
+        "apikey": apikey,
+    }
+
+    resp = requests.get(base_url, params=params, timeout=timeout)
+    resp.raise_for_status()  # 4xx/5xx → исключение
+
+    payload = resp.json()
+    if payload.get("status") != "1":
+        raise RuntimeError(
+            f"Etherscan error: status={payload.get('status')}, "
+            f"message={payload.get('message')}"
+        )
+
+    return int(payload["result"])
+
+
 if __name__ == "__main__":
-    address = "0x1f735280C83f13c6D40aA2eF213eb507CB4c1eC7"  # адрес контракта BASE
+    import streamlit as st
+    chainid = 8453
+    address = "0x252683e292d7E36977de92a6BF779d6Bc35176D4"  # адрес контракта BASE
+    apikey = st.secrets['etherscan']['key']
 
-    # Считаем последний обработанный блок, чтобы не начинать с нуля
-    last_processed = 31212443
-    # Текущий последний блок в сети
-    current_block = w3.eth.block_number
 
-    print(f"Начинаем сканирование с блока {last_processed} до {current_block}")
+    from_block = 31343717
 
-    logs = fetch_base_transactions_rpc(address, last_processed, current_block)
+
+    logs = fetch_logs(chainid=chainid, address=address, apikey=apikey, from_block=from_block)
+
     print(f"Найдено логов: {len(logs)}")
+    for log in logs:
+        print(log)

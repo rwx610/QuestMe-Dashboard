@@ -4,10 +4,11 @@ from utils.fetch_base import fetch_base_transactions_rpc
 from utils.fetch_ton import fetch_ton_transactions
 from utils.transform import transform_raw_base, transform_raw_ton
 from web3 import Web3
+import sys
 
 # Список отслеживаемых адресов
 BASE_CONTRACTS = {
-    "GemMinter": "0xabc1234567890...",  # Пример адреса
+    "GemMinter": "0x1f735280C83f13c6D40aA2eF213eb507CB4c1eC7",  # Пример адреса
     # можно добавить ещё
 }
 TON_CONTRACTS = {
@@ -16,7 +17,7 @@ TON_CONTRACTS = {
 }
 
 # Web3-провайдер для BASE
-w3 = Web3(Web3.HTTPProvider("https://base-rpc-url.com"))  # заменишь на свой
+w3 = Web3(Web3.HTTPProvider("https://base-rpc.publicnode.com"))  # заменишь на свой
 
 def update_base_data():
     for name, addr in BASE_CONTRACTS.items():
@@ -27,6 +28,7 @@ def update_base_data():
                 continue
             logs = fetch_base_transactions_rpc(addr, from_block=last+1, to_block=head)
             df = transform_raw_base(logs, addr)  # addr передай, если нужно фильтровать
+            print("TRANSFORM", len(df), df.head(1))
             upsert_tx(df)
             set_last_block("BASE", addr, head)
             print(f"[BASE] Updated {name}: {len(df)} tx")
@@ -34,14 +36,16 @@ def update_base_data():
             print(f"[BASE] Error updating {name}: {e}")
 
 def update_ton_data():
+    print(f"[TON] update_ton_data")
     for name, addr in TON_CONTRACTS.items():
         try:
-            last = get_last_block("TON", addr)
-            txs = fetch_ton_transactions(addr, since_lt=last)
+            txs = fetch_ton_transactions(addr)
             df = transform_raw_ton(txs, addr)
+            print("TRANSFORM", len(df), df.head(1), file=sys.stderr)
             upsert_tx(df)
             if not df.empty:
-                new_max = df["block_num"].max()
+                new_max = df["block"].max()
+                print(f"[NEW_MAX] {new_max}")
                 set_last_block("TON", addr, new_max)
             print(f"[TON] Updated {name}: {len(df)} tx")
         except Exception as e:
@@ -50,7 +54,7 @@ def update_ton_data():
 # Запуск планировщика
 def start():
     scheduler = BackgroundScheduler()
-    scheduler.add_job(update_base_data, "interval", minutes=10)
-    scheduler.add_job(update_ton_data, "interval", minutes=10)
+    scheduler.add_job(update_base_data, "interval", minutes=1)
+    scheduler.add_job(update_ton_data, "interval", minutes=1)
     scheduler.start()
-    print("[Scheduler] Jobs scheduled every 10 minutes")
+    print("[Scheduler] Jobs scheduled every 1 minutes")
