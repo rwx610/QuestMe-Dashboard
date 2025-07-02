@@ -10,7 +10,7 @@ from utils.transform import get_metrics, get_time_series, get_wallet_stats
 NETWORK = "TON"
 CONTRACT = "0x252683e292d7E36977de92a6BF779d6Bc35176D4"
 TYPE = "resetAndSendSponsorship"  # если фильтруете по type
-PAGE_TITLE = "💎 Mint GEM — TON"
+PAGE_TITLE = "Deposit  — Base"
 BASE_COLOR = "#3a6da3"  # единый цвет графиков
 
 st.set_page_config(page_title=PAGE_TITLE, layout="wide")
