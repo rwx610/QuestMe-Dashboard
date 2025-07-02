@@ -7,7 +7,7 @@ import plotly.express as px
 from utils.transform import get_metrics, get_time_series, get_wallet_stats
 
 # ─────────────────────────────────────────  конфиг
-NETWORK = "TON"
+NETWORK = "BASE"
 CONTRACT = "0x252683e292d7E36977de92a6BF779d6Bc35176D4"
 TYPE = "resetAndSendSponsorship"  # если фильтруете по type
 PAGE_TITLE = "Deposit  — Base"
