@@ -8,8 +8,8 @@ from utils.transform import get_metrics, get_time_series, get_wallet_stats
 
 # ─────────────────────────────────────────  конфиг
 NETWORK = "TON"
-CONTRACT = "UQCn9hCC6tNykDqZisfJvwrE9RQNPalV8VArNWrmI_REtoHz"
-TYPE = "TextComment"  # если фильтруете по type
+CONTRACT = "0x252683e292d7E36977de92a6BF779d6Bc35176D4"
+TYPE = "resetAndSendSponsorship"  # если фильтруете по type
 PAGE_TITLE = "💎 Mint GEM — TON"
 BASE_COLOR = "#3a6da3"  # единый цвет графиков
 
