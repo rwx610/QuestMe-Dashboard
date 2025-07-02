@@ -15,7 +15,7 @@ BASE_COLOR = "#3a6da3"  # единый цвет графиков
 
 st.set_page_config(page_title=PAGE_TITLE, layout="wide")
 st.title(PAGE_TITLE)
-st.markdown(f"WALLET: {CONTRACT}")
+st.markdown(f"CONTRACT: {CONTRACT}")
 
 wallet_filter = st.text_input("🔍 Minter (address)", "")
 
