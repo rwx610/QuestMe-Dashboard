@@ -40,16 +40,6 @@ def init_db():
         c.execute(
             "CREATE INDEX IF NOT EXISTS idx_net_ctr ON transactions (network, contract)"
         )
-        c.execute(
-            """
-          CREATE TABLE IF NOT EXISTS progress (
-            network     TEXT,
-            contract    TEXT,
-            last_block  INTEGER,
-            updated_at  TIMESTAMP,
-            PRIMARY KEY (network, contract)
-          )"""
-        )
     print("SQLite ready ✨")
 
 
@@ -65,26 +55,6 @@ def get_last_block(network: str, contract: str) -> int:
         ).fetchone()
     return cur[0] if cur else 0
 
-
-def set_last_block(network: str, contract: str, blk: int):
-    ts = datetime.utcnow()
-    with _conn() as c:
-        cur = c.execute(
-            """
-            UPDATE progress
-            SET last_block = ?, updated_at = ?
-            WHERE network = ? AND contract = ?
-            """,
-            (blk, ts, network, contract),
-        )
-        if cur.rowcount == 0:
-            c.execute(
-                """
-                INSERT INTO progress (network, contract, last_block, updated_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (network, contract, blk, ts),
-            )
 
 
 # ---------- tx upsert ----------

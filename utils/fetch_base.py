@@ -1,135 +1,71 @@
-from web3 import Web3
 import requests
 from typing import List, Dict, Union
 import streamlit as st
 
 
-RPC_URL = "https://base-rpc.publicnode.com"  # твой RPC URL
-MAX_BLOCK_RANGE = 50000
-
-
-w3 = Web3(Web3.HTTPProvider(RPC_URL))
-
-
-def fetch_base_transactions_rpc(address: str, from_block: int, to_block: int):
-    all_logs = []
-    current_from = from_block
-    while current_from <= to_block:
-        current_to = min(current_from + MAX_BLOCK_RANGE - 1, to_block)
-        print(f"Запрашиваю блоки с {current_from} по {current_to}")
-
-        try:
-            logs = w3.eth.get_logs(
-                {
-                    "fromBlock": current_from,
-                    "toBlock": current_to,
-                    "address": Web3.to_checksum_address(address),
-                }
-            )
-            all_logs.extend(logs)
-        except Exception as e:
-            print(f"Ошибка RPC запроса: {e}")
-            break
-
-        current_from = current_to + 1
-
-    return all_logs
-
-
-def fetch_logs(
+def fetch_transactions(
     chainid: int,
     address: str,
     from_block: Union[int, str] = 0,
     to_block: Union[int, str] = "latest",
-    apikey: str = st.secrets['etherscan']['key'],
+    apikey: str = None,
     offset: int = 1000,
     timeout: int = 20,
-    
+    sort: str = "asc"
 ) -> List[Dict]:
-
     base_url = "https://api.etherscan.io/v2/api"
     page = 1
-    all_logs = []
+    all_txs = []
 
     while True:
         params = {
             "chainid": chainid,
-            "module": "logs",
-            "action": "getLogs",
+            "module": "account",
+            "action": "txlist",
             "address": address,
-            "fromBlock": from_block,
-            "toBlock": to_block,
+            "startblock": from_block,
+            "endblock": to_block,
             "page": page,
             "offset": offset,
+            "sort": sort,
             "apikey": apikey,
         }
+
         response = requests.get(base_url, params=params, timeout=timeout)
         response.raise_for_status()
 
         payload = response.json()
 
-        logs = payload.get("result", []) if payload.get("status") == "1" else []
+        txs = payload.get("result", []) if payload.get("status") == "1" else []
 
-        all_logs.extend(logs)
+        all_txs.extend(txs)
 
-        if len(logs) < offset:
+        if len(txs) < offset:
             break
         page += 1
 
-    return all_logs
+    return all_txs
 
-
-import time
-import requests
-from typing import Optional, Literal
-
-
-def get_block_by_time(
-    chainid: int,
-    apikey: str,
-    timestamp: Optional[int] = None,
-    closest: Literal["before", "after"] = "before",
-    timeout: int = 10,
-) -> int:
-
-    if timestamp is None:
-        timestamp = int(time.time())
-
-    base_url = "https://api.etherscan.io/v2/api"
-    params = {
-        "chainid": chainid,
-        "module": "block",
-        "action": "getblocknobytime",
-        "timestamp": timestamp,
-        "closest": closest,
-        "apikey": apikey,
-    }
-
-    resp = requests.get(base_url, params=params, timeout=timeout)
-    resp.raise_for_status()  # 4xx/5xx → исключение
-
-    payload = resp.json()
-    if payload.get("status") != "1":
-        raise RuntimeError(
-            f"Etherscan error: status={payload.get('status')}, "
-            f"message={payload.get('message')}"
-        )
-
-    return int(payload["result"])
 
 
 if __name__ == "__main__":
     import streamlit as st
     chainid = 8453
-    address = "0x252683e292d7E36977de92a6BF779d6Bc35176D4"  # адрес контракта BASE
+    address = "0xa69a396c45Bd525f8516a43242580c4E88BbA401"  # адрес контракта BASE
     apikey = st.secrets['etherscan']['key']
-
 
     from_block = 31343717
 
 
-    logs = fetch_logs(chainid=chainid, address=address, apikey=apikey, from_block=from_block)
+    logs = fetch_transactions(chainid=chainid, address=address, apikey=apikey)
 
     print(f"Найдено логов: {len(logs)}")
     for log in logs:
         print(log)
+
+    import json
+
+    out_file = f"base_transactions.json"
+
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(logs, f, ensure_ascii=False, indent=2, default=str)

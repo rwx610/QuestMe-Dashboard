@@ -1,39 +1,27 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from utils.storage import get_last_block, set_last_block, upsert_tx
-from utils.fetch_base import fetch_logs
+from utils.storage import upsert_tx
+from utils.fetch_base import fetch_transactions
 from utils.fetch_ton import fetch_ton_transactions
 from utils.transform import transform_raw_base, transform_raw_ton
-from web3 import Web3
+import streamlit as st
 import sys
 
-from utils.contracts import Contracts
-
-# Список отслеживаемых адресов
-BASE_CONTRACTS = {
-    "GemMinter": "0x1f735280C83f13c6D40aA2eF213eb507CB4c1eC7",  # Пример адреса
-    # можно добавить ещё
-}
-TON_CONTRACTS = {
-    "GemMinter": "UQCn9hCC6tNykDqZisfJvwrE9RQNPalV8VArNWrmI_REtoHz",
-    # можно добавить ещё
-}
-
-# Web3-провайдер для BASE
-w3 = Web3(Web3.HTTPProvider("https://base-rpc.publicnode.com"))  # заменишь на свой
+from config import *
 
 
 def update_base_data():
-    for name, addr in BASE_CONTRACTS.items():
+    print(f"[BASE] update_base_data")
+    for name, data in CONTRACTS["base"].items():
         try:
-            last = get_last_block("BASE", addr)
-            head = w3.eth.block_number
-            if last >= head:
+            addr = data.get("address", None)
+            apikey = st.secrets['etherscan']['key']
+            if not addr:
                 continue
-            logs = fetch_logs(chainid=Contracts.base.chain_id, address=addr, from_block=31343717)
-            df = transform_raw_base(logs, addr)  # addr передай, если нужно фильтровать
+            txs = fetch_transactions(chainid=BASE_CHAIN_ID, address=addr, apikey=apikey)
+            df = transform_raw_base(txs, addr)  # addr передай, если нужно фильтровать
             print("TRANSFORM", len(df), df.head(1))
             upsert_tx(df)
-            set_last_block("BASE", addr, head)
+
             print(f"[BASE] Updated {name}: {len(df)} tx")
         except Exception as e:
             print(f"[BASE] Error updating {name}: {e}")
@@ -41,16 +29,16 @@ def update_base_data():
 
 def update_ton_data():
     print(f"[TON] update_ton_data")
-    for name, addr in TON_CONTRACTS.items():
+    for name, data in CONTRACTS["ton"].items():
         try:
+            addr = data.get("address", None)
+            if not addr:
+                continue
             txs = fetch_ton_transactions(addr)
             df = transform_raw_ton(txs, addr)
             print("TRANSFORM", len(df), df.head(1), file=sys.stderr)
             upsert_tx(df)
-            if not df.empty:
-                new_max = df["block"].max()
-                print(f"[NEW_MAX] {new_max}")
-                set_last_block("TON", addr, new_max)
+
             print(f"[TON] Updated {name}: {len(df)} tx")
         except Exception as e:
             print(f"[TON] Error updating {name}: {e}")
