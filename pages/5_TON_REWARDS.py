@@ -17,7 +17,7 @@ st.set_page_config(page_title=PAGE_TITLE, layout="wide")
 st.title(PAGE_TITLE)
 st.markdown(f"CONTRACT: {CONTRACT}")
 
-wallet_filter = st.text_input("Address", "")
+wallet_filter = st.text_input("🔍 Reward recipient (address)", "")
 
 
 # ─────────────────────────────────────────  метрики
@@ -47,17 +47,17 @@ st.markdown(
 
 cols1 = st.columns([1, 1, 1, 1])
 metric_map = [
-    ("Mint / Day", "volume_day"),
-    ("Mint / Week", "volume_week"),
-    ("Mint / Month", "volume_month"),
-    ("Mint / Total", "total_volume"),
+    ("Rewards / Day", "volume_day"),
+    ("Rewards / Week", "volume_week"),
+    ("Rewards / Month", "volume_month"),
+    ("Rewards / Total", "total_volume"),
 ]
 for col, (label, key) in zip(cols1, metric_map):
     col.metric(label, f"{m[key]:,}")
 
 cols2 = st.columns([1, 3])
-cols2[0].metric("Unique minters", f"{m['unique_wallets']:,}")
-cols2[1].metric("Total mint GEM", f"{m['total_volume']:,}")
+cols2[0].metric("Unique reward recipient", f"{m['unique_wallets']:,}")
+cols2[1].metric("Total rewards Withdrawal", f"{m['total_volume']:,}")
 
 dau, wau, mau = st.columns([1, 1, 2])
 dau.metric("DAU", f"{m['DAU']:,}")
@@ -89,19 +89,19 @@ def _draw_chart(df, title, x_dtick=None, x_format=None):
 
 with tab_day:
     _draw_chart(
-        _series(NETWORK, CONTRACT, TYPE, "daily"), "🕒 Mint in Last 24 Hours", x_dtick="H1", x_format="%H:%M"
+        _series(NETWORK, CONTRACT, TYPE, "daily"), "🕒 Rewards in Last 24 Hours", x_dtick="H1", x_format="%H:%M"
     )
 with tab_week:
     _draw_chart(
-        _series(NETWORK, CONTRACT, TYPE, "weekly"), "📅 Mint in Last 7 Days", x_dtick="D1", x_format="%b %d"
+        _series(NETWORK, CONTRACT, TYPE, "weekly"), "📅 Rewards in Last 7 Days", x_dtick="D1", x_format="%b %d"
     )
 with tab_month:
     _draw_chart(
-        _series(NETWORK, CONTRACT, TYPE, "monthly"), "📅 Mint in Last 30 Days", x_dtick="D1", x_format="%b %d"
+        _series(NETWORK, CONTRACT, TYPE, "monthly"), "📅 Rewards in Last 30 Days", x_dtick="D1", x_format="%b %d"
     )
 with tab_all:
     _draw_chart(
-        _series(NETWORK, CONTRACT, TYPE, "all"), "🕰️ Mint — All Time (Daily)", x_dtick="D1", x_format="%b %d %Y"
+        _series(NETWORK, CONTRACT, TYPE, "all"), "🕰️ Rewards — All Time (Daily)", x_dtick="D1", x_format="%b %d %Y"
     )
 
 
@@ -122,7 +122,7 @@ if wallet_filter:
     stats = get_wallet_stats(NETWORK, CONTRACT, wallet_filter, TYPE)
     st.info(
         f"Tx у **{wallet_filter}**: {stats['tx_count']:,} • "
-        f"Total GEM: {stats['total_value']}"
+        f"Total rewards: {stats['total_value']}"
     )
     st.dataframe(filt, use_container_width=True)
 else:
