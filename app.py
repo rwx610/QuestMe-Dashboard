@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.storage import init_db
+from analytics.storage import init_db
 from scheduler import start as start_scheduler
 
 

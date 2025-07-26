@@ -1,12 +1,12 @@
-from apscheduler.schedulers.background import BackgroundScheduler
-from utils.storage import upsert_tx
-from utils.fetch_base import fetch_transactions
-from utils.fetch_ton import fetch_ton_transactions
-from utils.transform import transform_raw_base, transform_raw_ton
-import streamlit as st
 import sys
+import streamlit as st
+from apscheduler.schedulers.background import BackgroundScheduler
+from analytics.fetch import fetch_base_transactions, fetch_ton_transactions
+from analytics.storage import upsert_tx
+from analytics.transform import transform_raw_base, transform_raw_ton
 
-from config import *
+
+from analytics.constants import *
 
 
 def update_base_data():
@@ -17,7 +17,7 @@ def update_base_data():
             apikey = st.secrets['etherscan']['key']
             if not addr:
                 continue
-            txs = fetch_transactions(chainid=BASE_CHAIN_ID, address=addr, apikey=apikey)
+            txs = fetch_base_transactions(chainid=BASE_CHAIN_ID, address=addr, apikey=apikey)
             df = transform_raw_base(txs, addr)  # addr передай, если нужно фильтровать
             print("TRANSFORM", len(df), df.head(1))
             upsert_tx(df)
