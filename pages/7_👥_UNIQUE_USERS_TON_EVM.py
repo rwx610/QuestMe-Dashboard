@@ -1,103 +1,140 @@
-# pages/7_👥_UNIQUE_USERS_ALL.py
+# pages/7_👥_UNIQUE_USERS_TON_EVM.py
 
 import streamlit as st
-from analytics.metrics import get_metrics, get_time_series
-from ui.display import inject_card_styles, metric_card, draw_chart, fill_missing_dates
 import pandas as pd
+from datetime import timedelta
+from analytics.storage import query_transactions
+from ui.display import metric_card, inject_card_styles, draw_chart, fill_missing_dates
 
-# ─────────────────────────────────────────  Конфигурация
-PAGE_TITLE = "Unique Users — TON + BASE"
+# ───────────────────────────────────────── Конфигурация
+PAGE_TITLE = "👥 Unique Users — TON + EVM"
+BASE_COLOR = "#47A76A"
+TYPES = ["reward", "0x76ebc41e", "TextComment", "resetAndSendSponsorship", "mintGem"]  # можно расширить при необходимости
+
 st.set_page_config(page_title=PAGE_TITLE, layout="wide")
 st.title(PAGE_TITLE)
 
-NETWORKS = {
-    "BASE": {
-        "contract": "0x1f735280C83f13c6D40aA2eF213eb507CB4c1eC7",  # Пример: reward
-        "type": "reward",
-    },
-    "TON": {
-        "contract": "EQCfcwvBP2cnD8UwWLKtX1pcAqEDFwFyXzuZ0seyPBdocPHu",  # Пример
-        "type": "0x76ebc41e",
-    },
-}
-
-BASE_COLOR = "#3a6da3"
-
-# ─────────────────────────────────────────  Стили
 inject_card_styles()
 
-# ─────────────────────────────────────────  Метрики
+
+# ───────────────────────────────────────── Получение и агрегация
 @st.cache_data(ttl=30)
-def _get_user_metrics():
-    all_wallets = set()
-    metrics_by_period = {"dau": set(), "wau": set(), "mau": set()}
+def load_data():
+    df = query_transactions()
+    df = df[df["type"].isin(TYPES)]
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    return df
 
-    for net, data in NETWORKS.items():
-        m = get_metrics(net, data["contract"], data["type"])
 
-        # Обработка unique_wallets
-        value = m.get("unique_wallets", [])
-        if isinstance(value, set):
-            all_wallets.update(value)
-        else:
-            all_wallets.update([])
+def count_unique_wallets(df: pd.DataFrame, since: pd.Timestamp) -> int:
+    return df[df["timestamp"] >= since]["from"].nunique()
 
-        # Обработка dau/wau/mau
-        for k in ["dau", "wau", "mau"]:
-            value = m.get(k, [])
-            if isinstance(value, set):
-                metrics_by_period[k].update(value)
-            else:
-                metrics_by_period[k].update([])
 
-    return {
-        "unique_wallets": len(all_wallets),
-        "dau": len(metrics_by_period["dau"]),
-        "wau": len(metrics_by_period["wau"]),
-        "mau": len(metrics_by_period["mau"]),
-    }
+df = load_data()
+now = pd.Timestamp.utcnow()
 
-metrics = _get_user_metrics()
+# ───────────────────────────────────────── Метрики
+st.markdown("### 👥 Unique Users — All Chains")
 
-st.markdown("### 👥 Unique Users (All Chains)")
 cols = st.columns(4)
-cols[0].markdown(metric_card("DAU", f"{metrics['dau']:,}", "Daily Active Users — across all chains"), unsafe_allow_html=True)
-cols[1].markdown(metric_card("WAU", f"{metrics['wau']:,}", "Weekly Active Users — across all chains"), unsafe_allow_html=True)
-cols[2].markdown(metric_card("MAU", f"{metrics['mau']:,}", "Monthly Active Users — across all chains"), unsafe_allow_html=True)
-cols[3].markdown(metric_card("UAW (All time)", f"{metrics['unique_wallets']:,}", "Total unique wallets across all chains"), unsafe_allow_html=True)
+metrics = {
+    "DAU": count_unique_wallets(df, now - timedelta(days=1)),
+    "WAU": count_unique_wallets(df, now - timedelta(days=7)),
+    "MAU": count_unique_wallets(df, now - timedelta(days=30)),
+    "All Time": df["from"].nunique(),
+}
+tooltips = {
+    "DAU": "Users in the last 24h",
+    "WAU": "Users in the last 7d",
+    "MAU": "Users in the last 30d",
+    "All Time": "Total unique users who interacted with contracts",
+}
+
+for col, (label, value) in zip(cols, metrics.items()):
+    col.markdown(metric_card(label, f"{value:,}", tooltips[label]), unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ─────────────────────────────────────────  Графики
+
+# ───────────────────────────────────────── Графики
 @st.cache_data(ttl=30)
-def _get_series(period: str) -> pd.DataFrame:
-    dfs = []
-    for net, data in NETWORKS.items():
-        df = get_time_series(net, data["contract"], data["type"], period)
-        if not df.empty:
-            df = df[["period", "wallet"]].drop_duplicates()
-            df["count"] = 1
-            df = df.groupby("period").agg({"wallet": "nunique"}).rename(columns={"wallet": f"users_{net}"})
-            dfs.append(df)
+@st.cache_data(ttl=30)
+def get_time_series_for_UU(df: pd.DataFrame, period: str) -> pd.DataFrame:
+    PERIODS = {
+        "daily": timedelta(days=1),
+        "weekly": timedelta(weeks=1),
+        "monthly": timedelta(days=30),
+        "all": None,
+    }
 
-    if not dfs:
-        return pd.DataFrame()
+    df_filtered = df.copy()
 
-    df_all = pd.concat(dfs, axis=1).fillna(0)
-    df_all["users"] = df_all.sum(axis=1)
-    df_all = df_all.reset_index()
-    return fill_missing_dates(df_all[["period", "users"]], period)
+    if PERIODS[period] is not None:
+        cutoff = now - PERIODS[period]
+        df_filtered = df_filtered[df_filtered["timestamp"] >= cutoff]
 
-tab_day, tab_week, tab_month = st.tabs(["📅 Daily", "📅 Weekly", "📅 Monthly"])
+    # Назначаем период (дата без времени)
+    df_filtered["period"] = df_filtered["timestamp"].dt.floor("d" if period != "daily" else "h")
+
+    # Убираем дубликаты: один юзер в один период считается один раз
+    unique_users = df_filtered.drop_duplicates(subset=["period", "from"])
+
+    # Считаем, сколько уникальных пользователей было в каждом периоде
+    grouped = (
+        unique_users.groupby("period")
+        .agg(users=("from", "count"))
+        .reset_index()
+        .sort_values("period")
+    )
+
+    result = fill_missing_dates(grouped, period)
+    result["tx_count"] = result["users"]
+    return result
+
+def get_first_time_users_time_series(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    df["period"] = df["timestamp"].dt.floor("d")  # группировка по дням
+
+    # Берём дату первой активности каждого пользователя
+    first_seen = df.groupby("from")["period"].min().reset_index()
+
+    # Считаем количество впервые появившихся пользователей по дням
+    new_users = (
+        first_seen.groupby("period")
+        .size()
+        .reset_index(name="tx_count")
+        .sort_values("period")
+    )
+
+    return fill_missing_dates(new_users, period="all")  # можно поменять на "daily" при желании
+
+
+
+tab_day, tab_week, tab_month, tab_all, tab_first_time = st.tabs(
+    ["📅 Daily", "📅 Weekly", "📅 Monthly", "📅 All Time", "🧍 First-Time"]
+)
+
 
 with tab_day:
-    df = _get_series("daily")
-    draw_chart(df, "📅 Daily Active Users — All Chains", BASE_COLOR, x_format="%H:%M")
+    df_day = get_time_series_for_UU(df, "daily")
+    draw_chart(df_day, "📅 Daily Active Users — All Chains", BASE_COLOR, x_format="%H:%M")
 
 with tab_week:
-    df = _get_series("weekly")
-    draw_chart(df, "📅 Weekly Active Users — All Chains", BASE_COLOR, x_format="%b %d")
+    df_week = get_time_series_for_UU(df, "weekly")
+    draw_chart(df_week, "📅 Weekly Active Users — All Chains", BASE_COLOR, x_format="%b %d")
 
 with tab_month:
-    df = _get_series("monthly")
-    draw_chart(df, "📅 Monthly Active Users — All Chains", BASE_COLOR, x_format="%b %d")
+    df_month = get_time_series_for_UU(df, "monthly")
+    draw_chart(df_month, "📅 Monthly Active Users — All Chains", BASE_COLOR, x_format="%b %d")
+
+with tab_all:
+    df_all = get_time_series_for_UU(df, "all")
+    draw_chart(df_all, "📅 All Time Unique Users", BASE_COLOR, x_format="%b %d")
+
+with tab_first_time:
+    df_first = get_first_time_users_time_series(df)
+    draw_chart(df_first, "🧍 First-Time Unique Users", BASE_COLOR, x_format="%b %d")
+
+
+st.markdown("---")

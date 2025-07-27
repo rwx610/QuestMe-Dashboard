@@ -14,19 +14,20 @@ st.title(PAGE_TITLE)
 
 NETWORKS = {
     "BASE": {
-        "contract": "0x1f735280C83f13c6D40aA2eF213eb507CB4c1eC7",
+        "contract": "0x1f735280c83f13c6d40aa2ef213eb507cb4c1ec7",
         "type": "reward",
-        "symbol": "USDC"
+        "symbol": "USDC",
     },
     "TON": {
         "contract": "EQCfcwvBP2cnD8UwWLKtX1pcAqEDFwFyXzuZ0seyPBdocPHu",
         "type": "0x76ebc41e",
-        "symbol": "USDT"
-    }
+        "symbol": "USDT",
+    },
 }
 
 # ─────────────────────────────────────────  Стили
 inject_card_styles()
+
 
 # ─────────────────────────────────────────  Получение и агрегация метрик
 @st.cache_data(ttl=30)
@@ -37,7 +38,7 @@ def _get_all_metrics():
         "tx_month": 0,
         "total_tx_count": 0,
         "total_volume": 0,
-        "unique_wallets": 0
+        "unique_wallets": 0,
     }
 
     for net, data in NETWORKS.items():
@@ -51,6 +52,7 @@ def _get_all_metrics():
 
     return totals
 
+
 metrics = _get_all_metrics()
 
 # ─────────────────────────────────────────  Метрики
@@ -60,10 +62,12 @@ metric_map = [
     ("Withdraw / Day", "tx_day", "Total withdrawn in last 24h"),
     ("Withdraw / Week", "tx_week", "Total withdrawn in last 7d"),
     ("Withdraw / Month", "tx_month", "Total withdrawn in last 30d"),
-    ("Total Withdrawn", "total_volume", "All-time rewards withdrawn")
+    ("Total Withdrawn", "total_tx_count", "All-time rewards withdrawn"),
 ]
 for col, (label, key, tooltip) in zip(cols, metric_map):
-    col.markdown(metric_card(label, f"${metrics[key]:,.2f}", tooltip), unsafe_allow_html=True)
+    col.markdown(
+        metric_card(label, f"{metrics[key]:,.0f}", tooltip), unsafe_allow_html=True
+    )
 
 # ─────────────────────────────────────────  Сводка
 st.markdown("---")
@@ -72,16 +76,25 @@ st.markdown("### 👥 & 💰 Summary")
 col1, col2 = st.columns(2)
 
 col1.markdown(
-    metric_card("Unique Wallets", f"{metrics['unique_wallets']:,}", "Total unique reward recipients across chains"),
-    unsafe_allow_html=True
+    metric_card(
+        "Unique Wallets",
+        f"{metrics['unique_wallets']:,}",
+        "Total unique reward recipients across chains",
+    ),
+    unsafe_allow_html=True,
 )
 
 col2.markdown(
-    metric_card("Total Withdrawn Volume", f"${metrics['total_volume']:,.2f}", "Sum of all rewards withdrawn (USDC + USDT)"),
-    unsafe_allow_html=True
+    metric_card(
+        "Total Withdrawn Volume",
+        f"${metrics['total_volume']:,.2f}",
+        "Sum of all rewards withdrawn (USDC + USDT)",
+    ),
+    unsafe_allow_html=True,
 )
 
 st.markdown("---")
+
 
 # ─────────────────────────────────────────  Графики по периодам
 @st.cache_data(ttl=30)
@@ -89,11 +102,12 @@ def _get_combined_series(period: str) -> pd.DataFrame:
     dfs = []
     for net, data in NETWORKS.items():
         df = get_time_series(net, data["contract"], data["type"], period)
-        df["tx_count"] = 1  # ✅ Добавлено
-        df = df[["period", "amount", "tx_count"]].rename(columns={
-            "amount": f"amount_{net}",
-            "tx_count": f"tx_count_{net}"
-        })
+        # ❌ df["tx_count"] = 1  — это удаляем
+
+        # Переименовываем tx_count и amount, чтобы сохранить сетевые данные отдельно
+        df = df[["period", "amount", "tx_count"]].rename(
+            columns={"amount": f"amount_{net}", "tx_count": f"tx_count_{net}"}
+        )
         dfs.append(df.set_index("period"))
 
     if not dfs:
@@ -101,13 +115,21 @@ def _get_combined_series(period: str) -> pd.DataFrame:
 
     df_all = pd.concat(dfs, axis=1).fillna(0)
 
-    df_all["amount"] = df_all[[col for col in df_all.columns if col.startswith("amount_")]].sum(axis=1)
-    df_all["tx_count"] = df_all[[col for col in df_all.columns if col.startswith("tx_count_")]].sum(axis=1)
+    # Суммируем по всем сетям
+    df_all["amount"] = df_all[
+        [col for col in df_all.columns if col.startswith("amount_")]
+    ].sum(axis=1)
+    df_all["tx_count"] = df_all[
+        [col for col in df_all.columns if col.startswith("tx_count_")]
+    ].sum(axis=1)
 
     df_all = df_all.reset_index()
     return fill_missing_dates(df_all, period)
 
-tab_day, tab_week, tab_month, tab_all = st.tabs(["📅 Daily", "📅 Weekly", "📅 Monthly", "📅 All Time"])
+
+tab_day, tab_week, tab_month, tab_all = st.tabs(
+    ["📅 Daily", "📅 Weekly", "📅 Monthly", "📅 All Time"]
+)
 
 with tab_day:
     df = _get_combined_series("daily")
@@ -123,13 +145,13 @@ with tab_month:
 
 with tab_all:
     df = _get_combined_series("all")
-    draw_chart(df, "📅 Total Withdrawals — All Time", BASE_COLOR, x_format="%b %Y")
+    draw_chart(df, "📅 Total Withdrawals — All Time", BASE_COLOR, x_format="%b %d")
 
 st.markdown("---")
 
 # ─────────────────────────────────────────  Поиск по кошельку
 st.markdown("### 🔍 Wallet Lookup: Total Rewards Withdrawn")
-wallet_input = st.text_input("Введите адрес кошелька", placeholder="Например: 0:abc...")
+wallet_input = st.text_input("Enter your wallet address", placeholder="0xabc...")
 
 CONTRACTS = [
     "0x1f735280c83f13c6d40aa2ef213eb507cb4c1ec7",
@@ -149,14 +171,16 @@ if wallet_input:
         if last_tx_str:
             last_tx_str = pd.to_datetime(last_tx_str).strftime("%Y-%m-%d %H:%M:%S")
         else:
-            last_tx_str = "Нет транзакций"
+            last_tx_str = "No transactions"
 
-        st.subheader("📊 Статистика по кошельку")
-        st.table({
-            "Общая сумма вывода (TON)": [round(summary["total_value"], 4)],
-            "Количество транзакций": [summary["tx_count"]],
-            "Последняя транзакция": [last_tx_str],
-        })
+        st.subheader("📊 Wallet statistics")
+        st.table(
+            {
+                "Total Withdrawal Amount": [round(summary["total_value"], 4)],
+                "Number of transactions": [summary["tx_count"]],
+                "Last transaction": [last_tx_str],
+            }
+        )
 
     except Exception as e:
         st.error(f"Ошибка при получении данных: {e}")
