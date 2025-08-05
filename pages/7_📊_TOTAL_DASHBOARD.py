@@ -1,4 +1,4 @@
-# pages/7_👥_UNIQUE_USERS_TON_EVM.py
+# pages/7_📊_TOTAL_DASHBOARD.py
 
 import streamlit as st
 import pandas as pd
@@ -7,15 +7,14 @@ from analytics.storage import query_transactions
 from ui.display import metric_card, inject_card_styles, draw_chart, fill_missing_dates
 
 # ───────────────────────────────────────── Конфигурация
-PAGE_TITLE = "👥 Unique Users — TON + EVM"
+PAGE_TITLE = "TOTAL DASHBOARD"
 BASE_COLOR = "#47A76A"
-TYPES = ["reward", "0x76ebc41e", "TextComment", "resetAndSendSponsorship", "mintGem"]  # можно расширить при необходимости
+TYPES = ["reward", "0x76ebc41e", "TextComment", "resetAndSendSponsorship", "mintGem"]
 
 st.set_page_config(page_title=PAGE_TITLE, layout="wide")
 st.title(PAGE_TITLE)
 
 inject_card_styles()
-
 
 # ───────────────────────────────────────── Получение и агрегация
 @st.cache_data(ttl=30)
@@ -33,7 +32,26 @@ def count_unique_wallets(df: pd.DataFrame, since: pd.Timestamp) -> int:
 df = load_data()
 now = pd.Timestamp.utcnow()
 
-# ───────────────────────────────────────── Метрики
+# ───────────────────────────────────────── Total Metrics в самом верху
+st.markdown("### 📊 Total Metrics")
+
+mint_df = df[df["type"].isin(["mintGem", "TextComment"])]
+rewards_df = df[df["type"].isin(["reward", "0x76ebc41e"])]
+deposits_df = df[df["type"] == "resetAndSendSponsorship"]
+all_users_df = df[df["type"].isin(TYPES)]
+
+total_gem_mints = len(mint_df)
+total_rewards = rewards_df["value"].sum() if "value" in rewards_df.columns else 0
+total_deposits = deposits_df["value"].sum() if "value" in deposits_df.columns else 0
+
+cols_metrics = st.columns(3)
+cols_metrics[0].markdown(metric_card("TOTAL GEM MINTS", f"{total_gem_mints:,}", "All gem mints (TON + BASE)"), unsafe_allow_html=True)
+cols_metrics[1].markdown(metric_card("TOTAL REWARDS", f"${total_rewards:,.2f}", "Total rewards distributed"), unsafe_allow_html=True)
+cols_metrics[2].markdown(metric_card("TOTAL DEPOSITS", f"${total_deposits:,.2f}", "Deposits (BASE only)"), unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ───────────────────────────────────────── Метрики активности
 st.markdown("### 👥 Unique Users — All Chains")
 
 cols = st.columns(4)
@@ -55,9 +73,7 @@ for col, (label, value) in zip(cols, metrics.items()):
 
 st.markdown("---")
 
-
 # ───────────────────────────────────────── Графики
-@st.cache_data(ttl=30)
 @st.cache_data(ttl=30)
 def get_time_series_for_UU(df: pd.DataFrame, period: str) -> pd.DataFrame:
     PERIODS = {
@@ -73,13 +89,10 @@ def get_time_series_for_UU(df: pd.DataFrame, period: str) -> pd.DataFrame:
         cutoff = now - PERIODS[period]
         df_filtered = df_filtered[df_filtered["timestamp"] >= cutoff]
 
-    # Назначаем период (дата без времени)
     df_filtered["period"] = df_filtered["timestamp"].dt.floor("d" if period != "daily" else "h")
 
-    # Убираем дубликаты: один юзер в один период считается один раз
     unique_users = df_filtered.drop_duplicates(subset=["period", "from"])
 
-    # Считаем, сколько уникальных пользователей было в каждом периоде
     grouped = (
         unique_users.groupby("period")
         .agg(users=("from", "count"))
@@ -91,15 +104,14 @@ def get_time_series_for_UU(df: pd.DataFrame, period: str) -> pd.DataFrame:
     result["tx_count"] = result["users"]
     return result
 
+
 def get_first_time_users_time_series(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-    df["period"] = df["timestamp"].dt.floor("d")  # группировка по дням
+    df["period"] = df["timestamp"].dt.floor("d")
 
-    # Берём дату первой активности каждого пользователя
     first_seen = df.groupby("from")["period"].min().reset_index()
 
-    # Считаем количество впервые появившихся пользователей по дням
     new_users = (
         first_seen.groupby("period")
         .size()
@@ -107,14 +119,12 @@ def get_first_time_users_time_series(df: pd.DataFrame) -> pd.DataFrame:
         .sort_values("period")
     )
 
-    return fill_missing_dates(new_users, period="all")  # можно поменять на "daily" при желании
-
+    return fill_missing_dates(new_users, period="all")
 
 
 tab_day, tab_week, tab_month, tab_all, tab_first_time = st.tabs(
     ["📅 Daily", "📅 Weekly", "📅 Monthly", "📅 All Time", "🧍 First-Time"]
 )
-
 
 with tab_day:
     df_day = get_time_series_for_UU(df, "daily")
@@ -135,6 +145,5 @@ with tab_all:
 with tab_first_time:
     df_first = get_first_time_users_time_series(df)
     draw_chart(df_first, "🧍 First-Time Unique Users", BASE_COLOR, x_format="%b %d")
-
 
 st.markdown("---")
